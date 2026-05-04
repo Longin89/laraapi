@@ -1,0 +1,125 @@
+version: '3.8'
+
+services:
+
+  # ========================================================================
+  # NGINX WEB SERVER
+  # ========================================================================
+  nginx:
+    container_name: nginx
+    build:
+      context: ./images/nginx
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./www:/var/www/html
+      - ./images/nginx/conf.d:/etc/nginx/conf.d
+    depends_on:
+      php:
+        condition: service_started
+    networks:
+      - laravel
+    environment:
+      - APP_ENV=${APP_ENV}
+      - APP_DEBUG=${APP_DEBUG}
+    restart: unless-stopped
+
+
+  # ========================================================================
+  # PHP-FPM APPLICATION CONTAINER
+  # ========================================================================
+  php:
+    container_name: php-fpm
+    build:
+      context: ./images/php
+      dockerfile: Dockerfile
+    volumes:
+      - ./www:/var/www/html
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - laravel
+    env_file:
+      - ./www/.env
+    environment:
+      - TZ=Europe/Moscow
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - CACHE_STORE=${CACHE_STORE}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    restart: unless-stopped
+
+
+  # ========================================================================
+  # MYSQL DATABASE
+  # ========================================================================
+  mysql:
+    container_name: mysql
+    image: mysql:9.7
+    volumes:
+      - ./www/mysql_data:/var/lib/mysql
+    networks:
+      - laravel
+    env_file:
+      - .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    restart: unless-stopped
+
+  # ========================================================================
+  # PHPMYADMIN - Database Management UI
+  # ========================================================================
+  phpmyadmin:
+    container_name: phpmyadmin
+    image: phpmyadmin:latest
+    restart: always
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_USER: ${DB_USERNAME}
+      PMA_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    networks:
+      - laravel
+    depends_on:
+      - mysql
+
+
+  # ========================================================================
+  # REDIS
+  # ========================================================================
+  redis:
+    container_name: redis
+    image: redis:latest
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - laravel
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+
+networks:
+  laravel:
+    driver: bridge
+
+
+# ========================================================================
+# NAMED VOLUMES
+# ========================================================================
+volumes:
+  redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
